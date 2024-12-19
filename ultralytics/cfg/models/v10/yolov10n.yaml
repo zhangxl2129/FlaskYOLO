@@ -1,0 +1,82 @@
+# Ultralytics YOLO 🚀, AGPL-3.0 license
+# YOLOv10 object detection model. For Usage examples see https://docs.ultralytics.com/tasks/detect
+
+# Parameters
+nc: 4 # number of classes
+scales: # model compound scaling constants, i.e. 'model=yolov10n.yaml' will call yolov10.yaml with scale 'n'
+  # [depth, width, max_channels]
+  n: [0.33, 0.25, 1024]
+
+train:
+  augment:
+    degrees: 5.0 # 增加旋转角度到 10 度
+    translate: 0.1 # 平移的范围从 10% 增加到 20%
+    shear: 1.0    # 增加剪切变换
+    scale: [0.5, 1.5]  # 缩放比例，从50%到150%
+    mosaic: 1.0  # 使用 mosaic 增强
+    random_perspective: 0.5  # 增加随机透视变换
+    hsv_h: 0.015  # 色调变化
+    hsv_s: 0.7  # 饱和度变化
+    hsv_v: 0.4  # 明度变化
+    cutout: 0.1  # 在10%的图片区域上使用遮盖增强
+
+#backbone:
+#  # [from, repeats, module, args]
+#  - [-1, 1, Conv, [64, 3, 2]] # 0-P1/2
+#  - [-1, 1, Conv, [128, 3, 2]] # 1-P2/4
+#  - [-1, 1, SEConv, [256, 256, 3, 2]]  # 这里的参数数量应与 SEConv 的构造函数一致
+#  - [-1, 3, C2f, [256, True]]
+#  - [-1, 1, Conv, [512, 3, 2]] # 提升到512通道
+#  - [-1, 6, C3, [512, True]] # 增加C3模块
+#  - [-1, 1, SCDown, [1024, 3, 2]] # 输出1024通道
+#  - [-1, 3, C3, [1024, True]]
+#  - [-1, 1, SPPF, [1024, 5]] # 空间金字塔池化
+#  - [-1, 1, PSA, [1024]] # 注意力机制
+
+backbone:
+  # [from, repeats, module, args]
+  - [-1, 1, Conv, [64, 3, 2]] # 0-P1/2
+  - [-1, 1, Conv, [128, 3, 2]] # 1-P2/4
+  - [ -1, 1, Conv, [ 256, 1, 1 ] ] # 新增 Conv 层，输出256通道
+  - [ -1, 3, C2f, [ 128, True ] ]
+  - [-1, 1, Conv, [256, 3, 2]] # 3-P3/8
+  - [-1, 6, C2f, [256, True]]
+  - [-1, 1, SCDown, [512, 3, 2]] # 5-P4/16
+  - [-1, 6, C2f, [512, True]]
+  - [-1, 1, SCDown, [1024, 3, 2]] # 7-P5/32
+  - [-1, 3, C3, [1024, True]]
+  - [-1, 1, SPPF, [1024, 5]] # 9
+  - [-1, 1, PSA, [1024]] # 10
+#backbone:
+#  # [from, repeats, module, args]
+#  - [-1, 1, Conv, [64, 3, 2]] # 0-P1/2
+#  - [-1, 1, Conv, [128, 3, 2]] # 1-P2/4
+#  - [-1, 3, C2f, [128, True]]
+#  - [-1, 1, Conv, [256, 3, 2]] # 3-P3/8
+#  - [-1, 6, C2f, [256, True]]
+#  - [-1, 1, SCDown, [512, 3, 2]] # 5-P4/16
+#  - [-1, 6, C2f, [512, True]]
+#  - [-1, 1, SCDown, [1024, 3, 2]] # 7-P5/32
+#  - [-1, 3, C2f, [1024, True]]
+#  - [-1, 1, SPPF, [1024, 5]] # 9
+#  - [-1, 1, PSA, [1024]] # 10
+
+# YOLOv10.0n head
+head:
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
+  - [[-1, 6], 1, Concat, [1]] # cat backbone P4
+  - [-1, 3, C2f, [512]] # 13
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
+  - [[-1, 4], 1, Concat, [1]] # cat backbone P3
+  - [-1, 3, C2f, [256]] # 16 (P3/8-small)
+
+  - [-1, 1, Conv, [256, 3, 2]]
+  - [[-1, 13], 1, Concat, [1]] # cat head P4
+  - [-1, 3, C2f, [512]] # 19 (P4/16-medium)
+
+  - [-1, 1, SCDown, [512, 3, 2]]
+  - [[-1, 10], 1, Concat, [1]] # cat head P5
+  - [-1, 3, C2fCIB, [1024, True, True]] # 22 (P5/32-large)
+
+  - [[16, 19, 22], 1, v10Detect, [nc]] # Detect(P3, P4, P5)
